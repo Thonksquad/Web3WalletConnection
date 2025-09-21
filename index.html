@@ -3,15 +3,29 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Supabase Project</title>
-    <link rel="stylesheet" href="style.css">
+    <title>Supabase Web3 Auth</title>
+    <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-    <div id="app">
-        <h1>My Supabase Project</h1>
-        <div id="content"></div>
-        <button onclick="loadData()">Load Data</button>
+    <div class="container">
+        <h1>Web3 Authentication (Ethereum)</h1>
+        
+        <button id="signInBtn" onclick="signInWithWeb3()">Sign in with Web3 (Ethereum)</button>
+        <button id="signOutBtn" onclick="signOut()" style="background-color: #ef4444;">Sign Out</button>
+
+        <div id="userInfo" style="display: none;">
+            <h3>User Information</h3>
+            <p><strong>Email:</strong> <span id="userEmail"></span></p>
+            <p><strong>Wallet Address:</strong> <span id="userAddress"></span></p>
+            <p><strong>User ID:</strong> <span id="userId"></span></p>
+        </div>
+
+        <div id="error"></div>
     </div>
-    <script type="module" src="main.js"></script>
+
+    <!-- Load Supabase from CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- Load your JavaScript file -->
+    <script src="app.js"></script>
 </body>
 </html>

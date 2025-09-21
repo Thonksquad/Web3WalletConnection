@@ -1,36 +1,79 @@
 body {
     font-family: Arial, sans-serif;
-    max-width: 800px;
-    margin: 0 auto;
+    max-width: 600px;
+    margin: 50px auto;
     padding: 20px;
     background-color: #f5f5f5;
 }
 
-#app {
+.container {
     background: white;
-    padding: 20px;
-    border-radius: 8px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    padding: 30px;
+    border-radius: 10px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
 }
 
 button {
     background-color: #3b82f6;
     color: white;
-    padding: 10px 20px;
+    padding: 12px 24px;
     border: none;
-    border-radius: 4px;
+    border-radius: 6px;
     cursor: pointer;
     font-size: 16px;
+    margin: 10px 0;
+    width: 100%;
+    transition: background-color 0.3s ease;
 }
 
 button:hover {
     background-color: #2563eb;
 }
 
-#content {
+button:disabled {
+    background-color: #9ca3af;
+    cursor: not-allowed;
+}
+
+#userInfo {
     margin-top: 20px;
+    padding: 15px;
+    background-color: #f0f9ff;
+    border-radius: 6px;
+    border: 1px solid #bae6fd;
+}
+
+#error {
+    color: #dc2626;
+    margin-top: 10px;
     padding: 10px;
-    border: 1px solid #ddd;
+    background-color: #fef2f2;
     border-radius: 4px;
-    background-color: #fafafa;
+    border: 1px solid #fecaca;
+    display: none;
+}
+
+.loading {
+    opacity: 0.7;
+    position: relative;
+}
+
+.loading::after {
+    content: '';
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 16px;
+    height: 16px;
+    border: 2px solid #ffffff;
+    border-radius: 50%;
+    border-top-color: transparent;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    to {
+        transform: translateY(-50%) rotate(360deg);
+    }
 }
