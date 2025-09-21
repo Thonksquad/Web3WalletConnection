@@ -24,13 +24,7 @@ function initializeApp() {
 
     // Create Supabase client
     const { createClient } = supabase;
-    supabaseClient = createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY, {
-        auth: {
-            autoRefreshToken: true,
-            persistSession: true,
-            detectSessionInUrl: true
-        }
-    });
+    supabaseClient = createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
 
     // Wait for Ethereum provider to be available
     waitForEthereumProvider();
@@ -39,6 +33,8 @@ function initializeApp() {
 function waitForEthereumProvider() {
     console.log('Checking for Ethereum provider...');
     console.log('window.ethereum:', window.ethereum);
+    console.log('Supabase URL:', window.SUPABASE_URL ? 'Set' : 'Not set');
+    console.log('Supabase Key:', window.SUPABASE_ANON_KEY ? 'Set' : 'Not set');
     
     if (typeof window.ethereum !== 'undefined') {
         console.log('Ethereum provider found immediately:', window.ethereum);
@@ -99,21 +95,13 @@ function setupEventListeners() {
         signOutBtn.addEventListener('click', () => signOut(supabaseClient));
     }
     
-    // Wait a bit before checking user to allow session to initialize
-    setTimeout(() => {
-        checkUser(supabaseClient);
-    }, 500);
+    checkUser(supabaseClient);
     
     // Listen for auth state changes
     if (supabaseClient) {
         supabaseClient.auth.onAuthStateChange((event, session) => {
-            console.log('Auth state changed:', event, session);
-            if (event === 'INITIAL_SESSION') {
-                // Wait a bit longer for the initial session to settle
-                setTimeout(() => checkUser(supabaseClient), 1000);
-            } else {
-                checkUser(supabaseClient);
-            }
+            console.log('Auth state changed:', event);
+            checkUser(supabaseClient);
         });
     }
 }
@@ -131,12 +119,8 @@ async function signInWithWeb3() {
         hideError();
         setLoading(true, document.getElementById('signInBtn'));
 
-        // Request account access first
-        await window.ethereum.request({ method: 'eth_requestAccounts' });
-        
         // This should trigger MetaMask to open and request signature
         const { data, error } = await supabaseClient.auth.signInWithWeb3({
-            provider: 'metamask',
             chain: 'ethereum',
             statement: 'I accept the Terms of Service'
         });
@@ -190,75 +174,37 @@ async function signOut(supabase) {
 async function checkUser(supabase) {
     try {
         if (!supabase) {
-            console.error('Supabase client not available for user check');
-            return;
+            throw new Error('Supabase client not initialized');
         }
         
-        // Use getSession instead of getUser to avoid session errors
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        const { data: { user }, error } = await supabase.auth.getUser();
         
-        if (sessionError) {
-            console.log('Session error (may be normal if no user logged in):', sessionError.message);
-            // This is normal when no user is logged in
-            updateUIForNoUser();
-            return;
+        if (error) {
+            throw error;
         }
         
-        if (session) {
-            // Now get user details
-            const { data: { user }, error: userError } = await supabase.auth.getUser();
+        const userInfo = document.getElementById('userInfo');
+        const signInBtn = document.getElementById('signInBtn');
+        const signOutBtn = document.getElementById('signOutBtn');
+        
+        if (user) {
+            // User is logged in
+            userInfo.style.display = 'block';
+            document.getElementById('userEmail').textContent = user.email || 'No email';
+            document.getElementById('userAddress').textContent = user.user_metadata?.wallet_address || 'No wallet address';
+            document.getElementById('userId').textContent = user.id;
             
-            if (userError) {
-                console.error('Error getting user:', userError);
-                showError('Failed to get user details');
-                return;
-            }
-            
-            if (user) {
-                updateUIForUser(user);
-                return;
-            }
+            signInBtn.style.display = 'none';
+            signOutBtn.style.display = 'block';
+        } else {
+            // User is not logged in
+            userInfo.style.display = 'none';
+            signInBtn.style.display = 'block';
+            signOutBtn.style.display = 'none';
         }
-        
-        // No session or user found
-        updateUIForNoUser();
-        
     } catch (error) {
         console.error('Error checking user:', error);
-        // Don't show error for session missing issues as they're common
-        if (!error.message.includes('Auth session missing')) {
-            showError('Failed to check user status');
-        }
-    }
-}
-
-function updateUIForUser(user) {
-    const userInfo = document.getElementById('userInfo');
-    const signInBtn = document.getElementById('signInBtn');
-    const signOutBtn = document.getElementById('signOutBtn');
-    
-    if (userInfo && signInBtn && signOutBtn) {
-        // User is logged in
-        userInfo.style.display = 'block';
-        document.getElementById('userEmail').textContent = user.email || 'No email';
-        document.getElementById('userAddress').textContent = user.user_metadata?.wallet_address || 'No wallet address';
-        document.getElementById('userId').textContent = user.id;
-        
-        signInBtn.style.display = 'none';
-        signOutBtn.style.display = 'block';
-    }
-}
-
-function updateUIForNoUser() {
-    const userInfo = document.getElementById('userInfo');
-    const signInBtn = document.getElementById('signInBtn');
-    const signOutBtn = document.getElementById('signOutBtn');
-    
-    if (userInfo && signInBtn && signOutBtn) {
-        // User is not logged in
-        userInfo.style.display = 'none';
-        signInBtn.style.display = 'block';
-        signOutBtn.style.display = 'none';
+        showError('Failed to check user status');
     }
 }
 
