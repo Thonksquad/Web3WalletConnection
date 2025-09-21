@@ -10,8 +10,8 @@
     <div class="container">
         <h1>Web3 Authentication (Ethereum)</h1>
         
-        <button id="signInBtn" onclick="signInWithWeb3()">Sign in with Web3 (Ethereum)</button>
-        <button id="signOutBtn" onclick="signOut()" style="background-color: #ef4444;">Sign Out</button>
+        <button id="signInBtn">Sign in with Web3 (Ethereum)</button>
+        <button id="signOutBtn" style="background-color: #ef4444; display: none;">Sign Out</button>
 
         <div id="userInfo" style="display: none;">
             <h3>User Information</h3>
@@ -23,9 +23,11 @@
         <div id="error"></div>
     </div>
 
+    <!-- Load config first -->
+    <script src="config.js"></script>
     <!-- Load Supabase from CDN -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <!-- Load your JavaScript file -->
+    <!-- Load your main app logic -->
     <script src="app.js"></script>
 </body>
 </html>
