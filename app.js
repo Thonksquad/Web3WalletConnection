@@ -1,149 +1,239 @@
 // app.js - Main application logic
+let supabaseClient = null;
+let isInitialized = false;
 
-// Wait for the Supabase library to load and initialize everything
+// Initialize the application
 function initializeApp() {
-    // Check if supabase is available
-    if (typeof supabase === 'undefined') {
-        console.error('Supabase library not loaded yet');
+    // Check if config is available
+    if (typeof SUPABASE_CONFIG === 'undefined' || !SUPABASE_CONFIG.URL || !SUPABASE_CONFIG.ANON_KEY) {
+        console.error('Supabase config not loaded or incomplete');
+        showError('Configuration error: Please check your config.js file');
         return;
     }
 
-    // Create Supabase client using config from config.js
-    const { createClient } = supabase;
-    const supabaseClient = createClient(SUPABASE_CONFIG.URL, SUPABASE_CONFIG.ANON_KEY);
+    // Check if supabase is available
+    if (typeof supabase === 'undefined') {
+        console.error('Supabase library not loaded');
+        showError('Supabase library failed to load');
+        return;
+    }
 
-    // DOM Elements
+    // Create Supabase client
+    const { createClient } = supabase;
+    supabaseClient = createClient(SUPABASE_CONFIG.URL, SUPABASE_CONFIG.ANON_KEY);
+
+    // Wait for Ethereum provider to be available
+    waitForEthereumProvider();
+}
+
+function waitForEthereumProvider() {
+    console.log('Checking for Ethereum provider...');
+    console.log('window.ethereum:', window.ethereum);
+    console.log('window object keys:', Object.keys(window).filter(key => key.includes('ethereum') || key.includes('web3') || key.includes('meta')));
+    
+    if (typeof window.ethereum !== 'undefined') {
+        console.log('Ethereum provider found immediately:', window.ethereum);
+        setupApp();
+    } else {
+        console.log('Waiting for Ethereum provider...');
+        
+        let checks = 0;
+        const checkInterval = setInterval(() => {
+            checks++;
+            console.log(`Check #${checks} for window.ethereum`);
+            
+            if (typeof window.ethereum !== 'undefined') {
+                console.log('Ethereum provider found after', checks * 100, 'ms:', window.ethereum);
+                clearInterval(checkInterval);
+                setupApp();
+            }
+        }, 100);
+
+        setTimeout(() => {
+            console.log('Timeout reached after 5 seconds');
+            clearInterval(checkInterval);
+            if (typeof window.ethereum === 'undefined') {
+                console.error('Ethereum wallet not detected after timeout');
+                console.log('Final window check:', Object.keys(window).filter(key => key.includes('ethereum') || key.includes('web3') || key.includes('meta')));
+                showError('Please make sure MetaMask is installed and refresh the page');
+                const signInBtn = document.getElementById('signInBtn');
+                if (signInBtn) {
+                    signInBtn.style.display = 'none';
+                }
+            }
+        }, 5000);
+    }
+}
+
+function setupApp() {
+    if (isInitialized) return;
+    isInitialized = true;
+    
+    console.log('Ethereum provider detected:', window.ethereum);
+    
+    // Set up event listeners when DOM is ready
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', setupEventListeners);
+    } else {
+        setupEventListeners();
+    }
+}
+
+function setupEventListeners() {
     const signInBtn = document.getElementById('signInBtn');
     const signOutBtn = document.getElementById('signOutBtn');
-    const userInfo = document.getElementById('userInfo');
-    const errorDiv = document.getElementById('error');
-
-    // Initialize when DOM is loaded
-    document.addEventListener('DOMContentLoaded', function() {
-        // Add event listeners instead of using inline onclick
-        signInBtn.addEventListener('click', function() {
-            signInWithWeb3(supabaseClient);
-        });
-        signOutBtn.addEventListener('click', function() {
-            signOut(supabaseClient);
-        });
-        
-        checkUser(supabaseClient);
-        
-        // Listen for auth state changes
+    
+    if (signInBtn) {
+        signInBtn.addEventListener('click', signInWithWeb3);
+        signInBtn.style.display = 'block'; // Make sure it's visible
+    }
+    
+    if (signOutBtn) {
+        signOutBtn.addEventListener('click', () => signOut(supabaseClient));
+    }
+    
+    checkUser(supabaseClient);
+    
+    // Listen for auth state changes
+    if (supabaseClient) {
         supabaseClient.auth.onAuthStateChange((event, session) => {
             console.log('Auth state changed:', event);
             checkUser(supabaseClient);
         });
-    });
-
-    async function signInWithWeb3(supabase) {
-        try {
-            hideError();
-            setLoading(true, signInBtn);
-            
-            const { data, error } = await supabase.auth.signInWithWeb3({
-                chain: 'ethereum',
-                statement: 'I accept the Terms of Service',
-            });
-
-            if (error) {
-                throw error;
-            }
-
-            console.log('Web3 sign-in initiated:', data);
-            alert('Please check your wallet to complete the sign-in process!');
-            
-        } catch (error) {
-            console.error('Sign-in error:', error);
-            showError(error.message);
-        } finally {
-            setLoading(false, signInBtn);
-        }
     }
+}
 
-    async function signOut(supabase) {
-        try {
-            setLoading(true, signOutBtn);
-            const { error } = await supabase.auth.signOut();
-            
-            if (error) {
-                throw error;
-            }
-            
-            console.log('Signed out successfully');
-            checkUser(supabase);
-            
-        } catch (error) {
-            console.error('Sign-out error:', error);
-            showError(error.message);
-        } finally {
-            setLoading(false, signOutBtn);
+async function signInWithWeb3() {
+    try {
+        if (!supabaseClient) {
+            throw new Error('Supabase client not initialized');
         }
-    }
-
-    async function checkUser(supabase) {
-        try {
-            const { data: { user }, error } = await supabase.auth.getUser();
-            
-            if (error) {
-                throw error;
-            }
-            
-            if (user) {
-                // User is logged in
-                userInfo.style.display = 'block';
-                document.getElementById('userEmail').textContent = user.email || 'No email';
-                document.getElementById('userAddress').textContent = user.user_metadata?.wallet_address || 'No wallet address';
-                document.getElementById('userId').textContent = user.id;
-                
-                signInBtn.style.display = 'none';
-                signOutBtn.style.display = 'block';
-            } else {
-                // User is not logged in
-                userInfo.style.display = 'none';
-                signInBtn.style.display = 'block';
-                signOutBtn.style.display = 'none';
-            }
-        } catch (error) {
-            console.error('Error checking user:', error);
-            showError('Failed to check user status');
+        
+        if (typeof window.ethereum === 'undefined') {
+            throw new Error('Ethereum wallet not available. Please install MetaMask.');
         }
-    }
+        
+        hideError();
+        setLoading(true, document.getElementById('signInBtn'));
 
-    function showError(message) {
+        // This should trigger MetaMask to open and request signature
+        const { data, error } = await supabaseClient.auth.signInWithWeb3({
+            chain: 'ethereum',
+            statement: 'I accept the Terms of Service'
+        });
+
+        if (error) {
+            throw error;
+        }
+
+        console.log('Web3 sign-in initiated:', data);
+        
+    } catch (error) {
+        console.error('Sign-in error:', error);
+        
+        // Handle specific Ethereum errors
+        if (error.code === 4001 || error.message?.includes('rejected') || error.message?.includes('canceled')) {
+            showError('Sign-in cancelled by user');
+        } else if (error.message?.includes('User rejected')) {
+            showError('Sign-in rejected by wallet');
+        } else {
+            showError(error.message || 'Sign-in failed');
+        }
+    } finally {
+        setLoading(false, document.getElementById('signInBtn'));
+    }
+}
+
+async function signOut(supabase) {
+    try {
+        if (!supabase) {
+            throw new Error('Supabase client not initialized');
+        }
+        
+        setLoading(true, document.getElementById('signOutBtn'));
+        const { error } = await supabase.auth.signOut();
+        
+        if (error) {
+            throw error;
+        }
+        
+        console.log('Signed out successfully');
+        checkUser(supabase);
+        
+    } catch (error) {
+        console.error('Sign-out error:', error);
+        showError(error.message);
+    } finally {
+        setLoading(false, document.getElementById('signOutBtn'));
+    }
+}
+
+async function checkUser(supabase) {
+    try {
+        if (!supabase) {
+            throw new Error('Supabase client not initialized');
+        }
+        
+        const { data: { user }, error } = await supabase.auth.getUser();
+        
+        if (error) {
+            throw error;
+        }
+        
+        const userInfo = document.getElementById('userInfo');
+        const signInBtn = document.getElementById('signInBtn');
+        const signOutBtn = document.getElementById('signOutBtn');
+        
+        if (user) {
+            // User is logged in
+            userInfo.style.display = 'block';
+            document.getElementById('userEmail').textContent = user.email || 'No email';
+            document.getElementById('userAddress').textContent = user.user_metadata?.wallet_address || 'No wallet address';
+            document.getElementById('userId').textContent = user.id;
+            
+            signInBtn.style.display = 'none';
+            signOutBtn.style.display = 'block';
+        } else {
+            // User is not logged in
+            userInfo.style.display = 'none';
+            signInBtn.style.display = 'block';
+            signOutBtn.style.display = 'none';
+        }
+    } catch (error) {
+        console.error('Error checking user:', error);
+        showError('Failed to check user status');
+    }
+}
+
+function showError(message) {
+    const errorDiv = document.getElementById('error');
+    if (errorDiv) {
         errorDiv.textContent = `Error: ${message}`;
         errorDiv.style.display = 'block';
     }
+}
 
-    function hideError() {
+function hideError() {
+    const errorDiv = document.getElementById('error');
+    if (errorDiv) {
         errorDiv.style.display = 'none';
         errorDiv.textContent = '';
     }
+}
 
-    function setLoading(isLoading, button) {
+function setLoading(isLoading, button) {
+    if (button) {
         if (isLoading) {
             button.classList.add('loading');
             button.disabled = true;
+            button.textContent = 'Loading...';
         } else {
             button.classList.remove('loading');
             button.disabled = false;
+            button.textContent = 'Sign in with Web3 (Ethereum)';
         }
     }
-
-    // Make functions available globally if needed for other scripts
-    window.signInWithWeb3 = function() {
-        signInWithWeb3(supabaseClient);
-    };
-    window.signOut = function() {
-        signOut(supabaseClient);
-    };
 }
 
-// Wait for the Supabase library to load
-if (typeof supabase !== 'undefined') {
-    initializeApp();
-} else {
-    // If supabase isn't loaded yet, wait for it
-    window.addEventListener('load', initializeApp);
-}
+// Initialize the app when everything is loaded
+window.addEventListener('load', initializeApp);
