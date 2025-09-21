@@ -2,35 +2,16 @@
 let supabaseClient = null;
 let isInitialized = false;
 
-// Supabase configuration from window object (set by Coolify template variables)
-const SUPABASE_CONFIG = {
-    URL: window.SUPABASE_URL,
-    ANON_KEY: window.SUPABASE_ANON_KEY
-};
-
 // Initialize the application
 function initializeApp() {
     console.log('Initializing app...');
     console.log('Supabase URL from window:', window.SUPABASE_URL);
     console.log('Supabase Key from window:', window.SUPABASE_ANON_KEY ? 'Set' : 'Not set');
     
-    // Check if template variables were properly injected
-    if (!window.SUPABASE_URL || window.SUPABASE_URL === '{{ .SUPABASE_URL }}') {
-        console.error('Supabase URL template variable not properly injected');
-        showError('Configuration error: SUPABASE_URL not set in Coolify');
-        return;
-    }
-
-    if (!window.SUPABASE_ANON_KEY || window.SUPABASE_ANON_KEY === '{{ .SUPABASE_ANON_KEY }}') {
-        console.error('Supabase Anon Key template variable not properly injected');
-        showError('Configuration error: SUPABASE_ANON_KEY not set in Coolify');
-        return;
-    }
-
     // Check if config is available from window object
-    if (!SUPABASE_CONFIG.URL || !SUPABASE_CONFIG.ANON_KEY) {
+    if (!window.SUPABASE_URL || !window.SUPABASE_ANON_KEY) {
         console.error('Supabase config not loaded from window variables');
-        showError('Configuration error: Please check your environment variables in Coolify');
+        showError('Configuration error: Please check your environment variables');
         return;
     }
 
@@ -43,7 +24,7 @@ function initializeApp() {
 
     // Create Supabase client
     const { createClient } = supabase;
-    supabaseClient = createClient(SUPABASE_CONFIG.URL, SUPABASE_CONFIG.ANON_KEY);
+    supabaseClient = createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
 
     // Wait for Ethereum provider to be available
     waitForEthereumProvider();
@@ -52,8 +33,8 @@ function initializeApp() {
 function waitForEthereumProvider() {
     console.log('Checking for Ethereum provider...');
     console.log('window.ethereum:', window.ethereum);
-    console.log('Supabase Config URL:', SUPABASE_CONFIG.URL ? 'Set' : 'Not set');
-    console.log('Supabase Config Key:', SUPABASE_CONFIG.ANON_KEY ? 'Set' : 'Not set');
+    console.log('Supabase URL:', window.SUPABASE_URL ? 'Set' : 'Not set');
+    console.log('Supabase Key:', window.SUPABASE_ANON_KEY ? 'Set' : 'Not set');
     
     if (typeof window.ethereum !== 'undefined') {
         console.log('Ethereum provider found immediately:', window.ethereum);
@@ -91,7 +72,7 @@ function setupApp() {
     isInitialized = true;
     
     console.log('Ethereum provider detected:', window.ethereum);
-    console.log('Supabase client initialized with URL:', SUPABASE_CONFIG.URL);
+    console.log('Supabase client initialized with URL:', window.SUPABASE_URL);
     
     // Set up event listeners when DOM is ready
     if (document.readyState === 'loading') {
