@@ -2,17 +2,34 @@
 let supabaseClient = null;
 let isInitialized = false;
 
-// Supabase configuration from environment variables (set in Coolify)
+// Supabase configuration from window object (set by Coolify template variables)
 const SUPABASE_CONFIG = {
-    URL: window.SUPABASE_URL || process.env.SUPABASE_URL,
-    ANON_KEY: window.SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY
+    URL: window.SUPABASE_URL,
+    ANON_KEY: window.SUPABASE_ANON_KEY
 };
 
 // Initialize the application
 function initializeApp() {
-    // Check if config is available from environment variables
+    console.log('Initializing app...');
+    console.log('Supabase URL from window:', window.SUPABASE_URL);
+    console.log('Supabase Key from window:', window.SUPABASE_ANON_KEY ? 'Set' : 'Not set');
+    
+    // Check if template variables were properly injected
+    if (!window.SUPABASE_URL || window.SUPABASE_URL === '{{ .SUPABASE_URL }}') {
+        console.error('Supabase URL template variable not properly injected');
+        showError('Configuration error: SUPABASE_URL not set in Coolify');
+        return;
+    }
+
+    if (!window.SUPABASE_ANON_KEY || window.SUPABASE_ANON_KEY === '{{ .SUPABASE_ANON_KEY }}') {
+        console.error('Supabase Anon Key template variable not properly injected');
+        showError('Configuration error: SUPABASE_ANON_KEY not set in Coolify');
+        return;
+    }
+
+    // Check if config is available from window object
     if (!SUPABASE_CONFIG.URL || !SUPABASE_CONFIG.ANON_KEY) {
-        console.error('Supabase config not loaded from environment variables');
+        console.error('Supabase config not loaded from window variables');
         showError('Configuration error: Please check your environment variables in Coolify');
         return;
     }
@@ -54,21 +71,18 @@ function waitForEthereumProvider() {
                 clearInterval(checkInterval);
                 setupApp();
             }
-        }, 100);
-
-        setTimeout(() => {
-            console.log('Timeout reached after 5 seconds');
-            clearInterval(checkInterval);
-            if (typeof window.ethereum === 'undefined') {
+            
+            // Stop checking after 10 attempts (5 seconds)
+            if (checks >= 50) {
+                clearInterval(checkInterval);
                 console.error('Ethereum wallet not detected after timeout');
-                console.log('Final window check:', Object.keys(window).filter(key => key.includes('ethereum') || key.includes('web3') || key.includes('meta')));
                 showError('Please make sure MetaMask is installed and refresh the page');
                 const signInBtn = document.getElementById('signInBtn');
                 if (signInBtn) {
                     signInBtn.style.display = 'none';
                 }
             }
-        }, 5000);
+        }, 100);
     }
 }
 
