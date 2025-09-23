@@ -87,8 +87,8 @@ async function signInWithSolana() {
 
         console.log('Initiating Solana connection...');
 
-        // Detect Phantom wallet
-        const provider = await detectPhantomWallet(5000);
+        // Detect Phantom wallet with retries
+        const provider = await detectPhantomWallet(10000, 3);
         if (!provider) {
             throw new Error('Phantom wallet not detected. Please install Phantom wallet.');
         }
@@ -97,7 +97,19 @@ async function signInWithSolana() {
             isPhantom: provider.isPhantom,
             isConnected: provider.isConnected,
             publicKey: provider.publicKey?.toString(),
-            version: provider.version
+            version: provider.version,
+            methods: Object.keys(provider)
+        });
+
+        // Add event listeners for debugging
+        provider.on('connect', (publicKey) => {
+            console.log('Phantom connected, public key:', publicKey.toString());
+        });
+        provider.on('disconnect', () => {
+            console.log('Phantom disconnected');
+        });
+        provider.on('accountChanged', (publicKey) => {
+            console.log('Phantom account changed, new public key:', publicKey?.toString());
         });
 
         // Check if already connected
@@ -106,19 +118,15 @@ async function signInWithSolana() {
         } else {
             console.log('Attempting to connect to Phantom wallet...');
             try {
-                // Attempt to connect with a timeout
                 const connectionResponse = await Promise.race([
                     provider.connect(),
                     new Promise((_, reject) =>
                         setTimeout(() => reject(new Error('Connection timeout')), 15000)
                     )
                 ]);
-
                 console.log('Connection successful:', connectionResponse);
             } catch (connectError) {
                 console.error('Connection error:', connectError);
-
-                // Fallback: Check if public key is available despite error
                 if (provider.publicKey) {
                     console.log('Public key available despite connection error:', provider.publicKey.toString());
                 } else {
@@ -134,6 +142,14 @@ async function signInWithSolana() {
 
         const publicKey = provider.publicKey.toString();
         console.log('Public key retrieved:', publicKey);
+
+        // Log provider before Supabase auth
+        console.log('Provider for Supabase auth:', {
+            isPhantom: provider.isPhantom,
+            isConnected: provider.isConnected,
+            publicKey: publicKey,
+            methods: Object.keys(provider)
+        });
 
         // Proceed with Supabase authentication
         console.log('Starting Supabase web3 authentication...');
