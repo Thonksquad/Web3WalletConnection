@@ -60,12 +60,19 @@ function setupEventListeners() {
     console.log('Setting up event listeners...');
     
     const signInBtn = document.getElementById('signInBtn');
+    const signInSolanaBtn = document.getElementById('signInSolanaBtn');
     const signOutBtn = document.getElementById('signOutBtn');
     
     if (signInBtn) {
-        signInBtn.addEventListener('click', signInWithWeb3);
+        signInBtn.addEventListener('click', signInWithEthereum);
         signInBtn.style.display = 'block';
-        console.log('Sign in button listener added');
+        console.log('Ethereum sign in button listener added');
+    }
+    
+    if (signInSolanaBtn) {
+        signInSolanaBtn.addEventListener('click', signInWithSolana);
+        signInSolanaBtn.style.display = 'block';
+        console.log('Solana sign in button listener added');
     }
     
     if (signOutBtn) {
@@ -77,7 +84,7 @@ function setupEventListeners() {
     checkUserSafely();
 }
 
-async function signInWithWeb3() {
+async function signInWithEthereum() {
     try {
         if (!supabaseClient) {
             throw new Error('Supabase client not initialized');
@@ -90,23 +97,21 @@ async function signInWithWeb3() {
         hideError();
         setLoading(true, document.getElementById('signInBtn'));
 
-        console.log('Initiating Web3 sign-in...');
+        console.log('Initiating Ethereum Web3 sign-in...');
         
         // Request account access first
         const accounts = await window.ethereum.request({ 
             method: 'eth_requestAccounts' 
         });
         
-        console.log('Connected account:', accounts[0]);
+        console.log('Connected Ethereum account:', accounts[0]);
         
-        // Use a different approach for Web3 sign-in
-        const { data, error } = await supabaseClient.auth.signInWithOAuth({
+        // Use Supabase's Web3 sign-in for Ethereum
+        const { data, error } = await supabaseClient.auth.signInWithWeb3({
             provider: 'ethereum',
             options: {
-                queryParams: {
-                    chain: 'ethereum',
-                    statement: 'Sign in to access the application'
-                }
+                chain: 'ethereum',
+                statement: 'Sign in to access the application'
             }
         });
 
@@ -114,7 +119,7 @@ async function signInWithWeb3() {
             throw error;
         }
 
-        console.log('Web3 sign-in initiated:', data);
+        console.log('Ethereum Web3 sign-in initiated:', data);
         
         // Check user after successful sign-in
         setTimeout(() => {
@@ -122,61 +127,126 @@ async function signInWithWeb3() {
         }, 2000);
         
     } catch (error) {
-        console.error('Sign-in error:', error);
+        console.error('Ethereum sign-in error:', error);
         
         // Handle specific errors
         if (error.code === 4001 || error.message?.includes('rejected') || error.message?.includes('canceled')) {
-            showError('Sign-in cancelled by user');
+            showError('Ethereum sign-in cancelled by user');
         } else if (error.message?.includes('User rejected')) {
-            showError('Sign-in rejected by wallet');
+            showError('Ethereum sign-in rejected by wallet');
         } else {
-            showError(error.message || 'Sign-in failed. Please try again.');
+            showError(error.message || 'Ethereum sign-in failed. Please try again.');
         }
     } finally {
         setLoading(false, document.getElementById('signInBtn'));
     }
 }
 
-// Alternative Web3 sign-in method
-async function signInWithWeb3Alternative() {
+async function signInWithSolana() {
     try {
-        if (!window.ethereum) {
-            throw new Error('Ethereum wallet not available');
+        if (!supabaseClient) {
+            throw new Error('Supabase client not initialized');
+        }
+        
+        // Check if Solana wallet is available (Phantom, etc.)
+        if (typeof window.solana === 'undefined') {
+            throw new Error('Solana wallet not available. Please install Phantom wallet or another Solana wallet.');
+        }
+        
+        hideError();
+        setLoading(true, document.getElementById('signInSolanaBtn'));
+
+        console.log('Initiating Solana Web3 sign-in...');
+        
+        // Connect to Solana wallet
+        const response = await window.solana.connect();
+        const publicKey = response.publicKey.toString();
+        
+        console.log('Connected Solana account:', publicKey);
+        
+        // Use Supabase's Web3 sign-in for Solana
+        const { data, error } = await supabaseClient.auth.signInWithWeb3({
+            provider: 'solana',
+            options: {
+                chain: 'solana',
+                statement: 'Sign in to access the application'
+            }
+        });
+
+        if (error) {
+            throw error;
         }
 
-        // Get the current account
-        const accounts = await window.ethereum.request({ 
-            method: 'eth_requestAccounts' 
-        });
-        const account = accounts[0];
+        console.log('Solana Web3 sign-in initiated:', data);
         
-        console.log('Signing in with account:', account);
+        // Check user after successful sign-in
+        setTimeout(() => {
+            checkUserSafely();
+        }, 2000);
         
-        // Create a simple message to sign
+    } catch (error) {
+        console.error('Solana sign-in error:', error);
+        
+        // Handle specific errors
+        if (error.code === 4001 || error.message?.includes('rejected') || error.message?.includes('canceled')) {
+            showError('Solana sign-in cancelled by user');
+        } else if (error.message?.includes('User rejected')) {
+            showError('Solana sign-in rejected by wallet');
+        } else if (error.message?.includes('timeout')) {
+            showError('Solana wallet connection timeout. Please try again.');
+        } else {
+            showError(error.message || 'Solana sign-in failed. Please try again.');
+        }
+    } finally {
+        setLoading(false, document.getElementById('signInSolanaBtn'));
+    }
+}
+
+// Alternative Solana sign-in method for more control
+async function signInWithSolanaAlternative() {
+    try {
+        if (!window.solana) {
+            throw new Error('Solana wallet not available');
+        }
+
+        console.log('Using alternative Solana sign-in method...');
+        
+        // Connect to wallet
+        const response = await window.solana.connect();
+        const publicKey = response.publicKey.toString();
+        
+        console.log('Solana public key:', publicKey);
+        
+        // Create a message to sign
         const message = `Sign in to the application at ${new Date().toISOString()}`;
         
-        // Sign the message
-        const signature = await window.ethereum.request({
-            method: 'personal_sign',
-            params: [message, account],
-        });
+        // Request signature from Solana wallet
+        const encodedMessage = new TextEncoder().encode(message);
+        const { signature } = await window.solana.signMessage(encodedMessage, 'utf8');
         
-        console.log('Signature received:', signature);
+        console.log('Solana signature received');
         
-        // Use the signIn method that doesn't rely on session storage
-        const { data, error } = await supabaseClient.auth.signIn({
-            address: account,
-            signature: signature,
-            message: message
+        // Convert signature to hex string for Supabase
+        const signatureHex = Buffer.from(signature).toString('hex');
+        
+        // Sign in with Supabase
+        const { data, error } = await supabaseClient.auth.signInWithWeb3({
+            provider: 'solana',
+            options: {
+                address: publicKey,
+                signature: signatureHex,
+                message: message,
+                chain: 'solana'
+            }
         });
 
         if (error) throw error;
         
-        console.log('Sign-in successful:', data);
+        console.log('Solana sign-in successful:', data);
         return data;
         
     } catch (error) {
-        console.error('Alternative sign-in error:', error);
+        console.error('Alternative Solana sign-in error:', error);
         throw error;
     }
 }
@@ -257,6 +327,7 @@ function updateUIForAuthenticated(user) {
     console.log('User is authenticated:', user);
     const userInfo = document.getElementById('userInfo');
     const signInBtn = document.getElementById('signInBtn');
+    const signInSolanaBtn = document.getElementById('signInSolanaBtn');
     const signOutBtn = document.getElementById('signOutBtn');
     
     if (userInfo) {
@@ -267,6 +338,7 @@ function updateUIForAuthenticated(user) {
     }
     
     if (signInBtn) signInBtn.style.display = 'none';
+    if (signInSolanaBtn) signInSolanaBtn.style.display = 'none';
     if (signOutBtn) signOutBtn.style.display = 'block';
 }
 
@@ -274,10 +346,12 @@ function updateUIForUnauthenticated() {
     console.log('User is not authenticated');
     const userInfo = document.getElementById('userInfo');
     const signInBtn = document.getElementById('signInBtn');
+    const signInSolanaBtn = document.getElementById('signInSolanaBtn');
     const signOutBtn = document.getElementById('signOutBtn');
     
     if (userInfo) userInfo.style.display = 'none';
     if (signInBtn) signInBtn.style.display = 'block';
+    if (signInSolanaBtn) signInSolanaBtn.style.display = 'block';
     if (signOutBtn) signOutBtn.style.display = 'none';
 }
 
@@ -307,11 +381,23 @@ function setLoading(isLoading, button) {
         if (isLoading) {
             button.classList.add('loading');
             button.disabled = true;
-            button.textContent = button.id === 'signInBtn' ? 'Connecting...' : 'Signing out...';
+            if (button.id === 'signInBtn') {
+                button.textContent = 'Connecting Ethereum...';
+            } else if (button.id === 'signInSolanaBtn') {
+                button.textContent = 'Connecting Solana...';
+            } else {
+                button.textContent = 'Signing out...';
+            }
         } else {
             button.classList.remove('loading');
             button.disabled = false;
-            button.textContent = button.id === 'signInBtn' ? 'Sign in with Web3 (Ethereum)' : 'Sign Out';
+            if (button.id === 'signInBtn') {
+                button.textContent = 'Sign in with Ethereum';
+            } else if (button.id === 'signInSolanaBtn') {
+                button.textContent = 'Sign in with Solana';
+            } else {
+                button.textContent = 'Sign Out';
+            }
         }
     }
 }
