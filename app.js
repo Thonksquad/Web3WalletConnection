@@ -95,33 +95,63 @@ async function signInWithSolana() {
         }
 
         console.log('Phantom wallet detected, connecting...');
-        
-        // Use the recommended connection approach from Phantom docs
+        console.log('Provider state:', {
+            isConnected: provider.isConnected,
+            publicKey: provider.publicKey?.toString()
+        });
+
+        // Add connection timeout
+        const connectionTimeout = 15000; // 15 seconds
         let connectionResponse;
+        
+        // Method 1: Try the recommended connect() approach with timeout
         try {
-            // Method 1: Try the recommended connect() approach first
-            connectionResponse = await provider.connect();
+            connectionResponse = await Promise.race([
+                provider.connect(),
+                new Promise((_, reject) => 
+                    setTimeout(() => reject(new Error('Connection timeout')), connectionTimeout)
+                )
+            ]);
             console.log('Phantom connection successful:', connectionResponse);
         } catch (connectError) {
-            console.log('First connection attempt failed, trying alternative...', connectError);
+            console.log('First connection attempt failed:', connectError);
             
-            // Method 2: Try the request() method as fallback
-            try {
-                connectionResponse = await provider.request({ method: "connect" });
-                console.log('Alternative connection successful:', connectionResponse);
-            } catch (requestError) {
-                console.log('Alternative connection also failed:', requestError);
-                throw new Error(`Connection failed: ${requestError.message || 'User rejected the request'}`);
+            // If already connected, use current state
+            if (provider.isConnected && provider.publicKey) {
+                console.log('Wallet already connected, using existing connection');
+                connectionResponse = { publicKey: provider.publicKey };
+            } else {
+                // Method 2: Try the request() method as fallback
+                try {
+                    connectionResponse = await Promise.race([
+                        provider.request({ method: "connect" }),
+                        new Promise((_, reject) => 
+                            setTimeout(() => reject(new Error('Connection timeout')), connectionTimeout)
+                        )
+                    ]);
+                    console.log('Alternative connection successful:', connectionResponse);
+                } catch (requestError) {
+                    console.log('Alternative connection also failed:', requestError);
+                    
+                    // Check if we have a public key despite the error
+                    if (provider.publicKey) {
+                        console.log('Found public key despite error, continuing...');
+                        connectionResponse = { publicKey: provider.publicKey };
+                    } else {
+                        throw new Error(`Connection failed: ${requestError.message || 'User rejected the request'}`);
+                    }
+                }
             }
         }
 
         // Verify we have a public key
-        if (!provider.publicKey) {
+        if (!connectionResponse?.publicKey && !provider.publicKey) {
             throw new Error('Connected but no public key received');
         }
 
+        const publicKey = connectionResponse?.publicKey || provider.publicKey;
         console.log('Phantom wallet connected successfully');
-        console.log('Public key:', provider.publicKey.toString());
+        console.log('Public key:', publicKey.toString());
         console.log('Is connected:', provider.isConnected);
 
         // Use Supabase's signInWithWeb3 method for Solana
