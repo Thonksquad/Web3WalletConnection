@@ -32,7 +32,6 @@ function initializeApp() {
 
         console.log('Supabase client created successfully');
         
-        // Set up the app immediately without waiting for Ethereum
         setupApp();
         
     } catch (error) {
@@ -148,28 +147,55 @@ async function signInWithSolana() {
             throw new Error('Supabase client not initialized');
         }
         
-        // Check if Phantom wallet is available
-        if (typeof window.phantom === 'undefined') {
+        // Check if Phantom wallet is available using the correct property
+        if (!window.phantom?.solana && !window.solana) {
             throw new Error('Phantom wallet not available. Please install Phantom wallet.');
         }
+
+        // Get the Solana provider
+        const provider = window.phantom?.solana || window.solana;
         
         hideError();
         setLoading(true, document.getElementById('signInSolanaBtn'));
 
-        console.log('Initiating Solana Web3 sign-in with Phantom...');
+        console.log('Initiating Solana connection...');
         
-        // Use the correct Supabase syntax for Phantom wallet
-        const { data, error } = await supabaseClient.auth.signInWithWeb3({
-            chain: 'solana',
-            statement: 'Sign in to access the application',
-            wallet: window.phantom
+        // First, connect to the wallet
+        const response = await provider.connect();
+        const publicKey = response.publicKey.toString();
+        
+        console.log('Connected Solana account:', publicKey);
+
+        // Create a sign-in message
+        const message = `Sign in to the application at ${new Date().toISOString()}`;
+        const encodedMessage = new TextEncoder().encode(message);
+        
+        // Sign the message using Phantom's signMessage method
+        const { signature } = await provider.signMessage(encodedMessage, 'utf8');
+        
+        console.log('Message signed successfully');
+
+        // Convert signature to the format Supabase expects
+        const signatureBase64 = Buffer.from(signature).toString('base64');
+
+        // Use Supabase's signInWithOAuth for Solana
+        const { data, error } = await supabaseClient.auth.signInWithOAuth({
+            provider: 'solana',
+            options: {
+                queryParams: {
+                    publicKey: publicKey,
+                    signature: signatureBase64,
+                    message: message,
+                    chain: 'solana'
+                }
+            }
         });
 
         if (error) {
             throw error;
         }
 
-        console.log('Solana Web3 sign-in initiated:', data);
+        console.log('Solana sign-in successful:', data);
         
         // Check user after successful sign-in
         setTimeout(() => {
@@ -191,54 +217,6 @@ async function signInWithSolana() {
         }
     } finally {
         setLoading(false, document.getElementById('signInSolanaBtn'));
-    }
-}
-
-async function signInWithSolanaAlternative() {
-    try {
-        if (!window.solana) {
-            throw new Error('Solana wallet not available');
-        }
-
-        console.log('Using alternative Solana sign-in method...');
-        
-        // Connect to wallet
-        const response = await window.solana.connect();
-        const publicKey = response.publicKey.toString();
-        
-        console.log('Solana public key:', publicKey);
-        
-        // Create a message to sign
-        const message = `Sign in to the application at ${new Date().toISOString()}`;
-        
-        // Request signature from Solana wallet
-        const encodedMessage = new TextEncoder().encode(message);
-        const { signature } = await window.solana.signMessage(encodedMessage, 'utf8');
-        
-        console.log('Solana signature received');
-        
-        // Convert signature to hex string for Supabase
-        const signatureHex = Buffer.from(signature).toString('hex');
-        
-        // Sign in with Supabase
-        const { data, error } = await supabaseClient.auth.signInWithWeb3({
-            provider: 'solana',
-            options: {
-                address: publicKey,
-                signature: signatureHex,
-                message: message,
-                chain: 'solana'
-            }
-        });
-
-        if (error) throw error;
-        
-        console.log('Solana sign-in successful:', data);
-        return data;
-        
-    } catch (error) {
-        console.error('Alternative Solana sign-in error:', error);
-        throw error;
     }
 }
 
