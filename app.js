@@ -58,15 +58,8 @@ function setupApp() {
 function setupEventListeners() {
     console.log('Setting up event listeners...');
     
-    const signInBtn = document.getElementById('signInBtn');
     const signInSolanaBtn = document.getElementById('signInSolanaBtn');
     const signOutBtn = document.getElementById('signOutBtn');
-    
-    if (signInBtn) {
-        signInBtn.addEventListener('click', signInWithEthereum);
-        signInBtn.style.display = 'block';
-        console.log('Ethereum sign in button listener added');
-    }
     
     if (signInSolanaBtn) {
         signInSolanaBtn.addEventListener('click', signInWithSolana);
@@ -81,64 +74,6 @@ function setupEventListeners() {
     
     // Check user status with a safer approach
     checkUserSafely();
-}
-
-async function signInWithEthereum() {
-    try {
-        if (!supabaseClient) {
-            throw new Error('Supabase client not initialized');
-        }
-        
-        if (typeof window.ethereum === 'undefined') {
-            throw new Error('Ethereum wallet not available. Please install MetaMask.');
-        }
-        
-        hideError();
-        setLoading(true, document.getElementById('signInBtn'));
-
-        console.log('Initiating Ethereum Web3 sign-in...');
-        
-        // Request account access first
-        const accounts = await window.ethereum.request({ 
-            method: 'eth_requestAccounts' 
-        });
-        
-        console.log('Connected Ethereum account:', accounts[0]);
-        
-        // Use Supabase's Web3 sign-in for Ethereum
-        const { data, error } = await supabaseClient.auth.signInWithWeb3({
-            provider: 'ethereum',
-            options: {
-                chain: 'ethereum',
-                statement: 'Sign in to access the application'
-            }
-        });
-
-        if (error) {
-            throw error;
-        }
-
-        console.log('Ethereum Web3 sign-in initiated:', data);
-        
-        // Check user after successful sign-in
-        setTimeout(() => {
-            checkUserSafely();
-        }, 2000);
-        
-    } catch (error) {
-        console.error('Ethereum sign-in error:', error);
-        
-        // Handle specific errors
-        if (error.code === 4001 || error.message?.includes('rejected') || error.message?.includes('canceled')) {
-            showError('Ethereum sign-in cancelled by user');
-        } else if (error.message?.includes('User rejected')) {
-            showError('Ethereum sign-in rejected by wallet');
-        } else {
-            showError(error.message || 'Ethereum sign-in failed. Please try again.');
-        }
-    } finally {
-        setLoading(false, document.getElementById('signInBtn'));
-    }
 }
 
 async function signInWithSolana() {
@@ -295,7 +230,6 @@ async function checkUserSafely() {
 function updateUIForAuthenticated(user) {
     console.log('User is authenticated:', user);
     const userInfo = document.getElementById('userInfo');
-    const signInBtn = document.getElementById('signInBtn');
     const signInSolanaBtn = document.getElementById('signInSolanaBtn');
     const signOutBtn = document.getElementById('signOutBtn');
     
@@ -306,7 +240,6 @@ function updateUIForAuthenticated(user) {
         document.getElementById('userId').textContent = user.id;
     }
     
-    if (signInBtn) signInBtn.style.display = 'none';
     if (signInSolanaBtn) signInSolanaBtn.style.display = 'none';
     if (signOutBtn) signOutBtn.style.display = 'block';
 }
@@ -314,12 +247,10 @@ function updateUIForAuthenticated(user) {
 function updateUIForUnauthenticated() {
     console.log('User is not authenticated');
     const userInfo = document.getElementById('userInfo');
-    const signInBtn = document.getElementById('signInBtn');
     const signInSolanaBtn = document.getElementById('signInSolanaBtn');
     const signOutBtn = document.getElementById('signOutBtn');
     
     if (userInfo) userInfo.style.display = 'none';
-    if (signInBtn) signInBtn.style.display = 'block';
     if (signInSolanaBtn) signInSolanaBtn.style.display = 'block';
     if (signOutBtn) signOutBtn.style.display = 'none';
 }
@@ -350,9 +281,7 @@ function setLoading(isLoading, button) {
         if (isLoading) {
             button.classList.add('loading');
             button.disabled = true;
-            if (button.id === 'signInBtn') {
-                button.textContent = 'Connecting Ethereum...';
-            } else if (button.id === 'signInSolanaBtn') {
+            if (button.id === 'signInSolanaBtn') {
                 button.textContent = 'Connecting Solana...';
             } else {
                 button.textContent = 'Signing out...';
@@ -360,9 +289,7 @@ function setLoading(isLoading, button) {
         } else {
             button.classList.remove('loading');
             button.disabled = false;
-            if (button.id === 'signInBtn') {
-                button.textContent = 'Sign in with Ethereum';
-            } else if (button.id === 'signInSolanaBtn') {
+            if (button.id === 'signInSolanaBtn') {
                 button.textContent = 'Sign in with Solana';
             } else {
                 button.textContent = 'Sign Out';
