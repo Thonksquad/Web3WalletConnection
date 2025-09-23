@@ -82,31 +82,44 @@ async function signInWithSolana() {
             throw new Error('Supabase client not initialized');
         }
         
-        // Check if Phantom wallet is available
-        const provider = getPhantomProvider();
-        if (!provider) {
-            throw new Error('Phantom wallet not available. Please install Phantom wallet.');
-        }
-
         hideError();
         setLoading(true, document.getElementById('signInSolanaBtn'));
 
         console.log('Initiating Solana connection...');
         
-        // First, connect to the wallet if not already connected
-        if (!provider.isConnected) {
-            await provider.connect();
-        }
+        // Check for Phantom wallet with timeout
+        const provider = await detectPhantomWallet(5000); // 5 second timeout
         
-        console.log('Phantom wallet connected');
+        if (!provider) {
+            throw new Error('Phantom wallet not detected. Please install Phantom wallet and try again.');
+        }
+
+        console.log('Phantom wallet detected, connecting...');
+        
+        // Connect to Phantom wallet with explicit request
+        try {
+            const response = await provider.connect({ onlyIfTrusted: false });
+            console.log('Phantom connection response:', response);
+        } catch (connectError) {
+            console.log('Connection result:', provider.isConnected);
+            // Continue even if connect() throws, as it might still work
+        }
+
+        // Check if we're actually connected
+        if (!provider.isConnected) {
+            throw new Error('Failed to connect to Phantom wallet. Please check the wallet and try again.');
+        }
+
+        console.log('Phantom wallet connected successfully');
+        console.log('Public key:', provider.publicKey?.toString());
 
         // Use Supabase's signInWithWeb3 method for Solana
+        console.log('Starting Supabase web3 authentication...');
         const { data, error } = await supabaseClient.auth.signInWithWeb3({
             chain: 'solana',
             provider: provider,
             options: {
-                statement: 'Sign in to the application',
-                // Add any additional options needed
+                statement: 'Sign in to the application'
             }
         });
 
@@ -130,7 +143,7 @@ async function signInWithSolana() {
         } else if (error.message?.includes('User rejected')) {
             showError('Solana sign-in rejected by wallet');
         } else if (error.message?.includes('timeout')) {
-            showError('Solana wallet connection timeout. Please try again.');
+            showError('Wallet connection timeout. Please try again.');
         } else if (error.message?.includes('not found') || error.message?.includes('unavailable')) {
             showError('Phantom wallet not found. Please install Phantom wallet.');
         } else {
@@ -141,15 +154,105 @@ async function signInWithSolana() {
     }
 }
 
+// Improved Phantom wallet detection with timeout
+function detectPhantomWallet(timeout = 5000) {
+    return new Promise((resolve) => {
+        console.log('Detecting Phantom wallet...');
+        
+        // Immediate check
+        const provider = getPhantomProvider();
+        if (provider) {
+            console.log('Phantom wallet found immediately');
+            resolve(provider);
+            return;
+        }
+
+        // If not found immediately, wait for it to load
+        let timeoutId;
+        const checkInterval = setInterval(() => {
+            const foundProvider = getPhantomProvider();
+            if (foundProvider) {
+                clearInterval(checkInterval);
+                clearTimeout(timeoutId);
+                console.log('Phantom wallet found after waiting');
+                resolve(foundProvider);
+            }
+        }, 100);
+
+        // Timeout if wallet not detected
+        timeoutId = setTimeout(() => {
+            clearInterval(checkInterval);
+            console.log('Phantom wallet detection timeout');
+            resolve(null);
+        }, timeout);
+    });
+}
+
 // Helper function to get Phantom provider
 function getPhantomProvider() {
+    // Check various possible locations for Phantom
     if (window.phantom?.solana?.isPhantom) {
         return window.phantom.solana;
     }
     if (window.solana?.isPhantom) {
         return window.solana;
     }
+    if (window.phantom?.solana) {
+        return window.phantom.solana;
+    }
+    if (window.solana) {
+        return window.solana;
+    }
     return null;
+}
+
+// Alternative sign-in method if the main one fails
+async function signInWithSolanaAlternative() {
+    try {
+        if (!supabaseClient) {
+            throw new Error('Supabase client not initialized');
+        }
+        
+        hideError();
+        setLoading(true, document.getElementById('signInSolanaBtn'));
+
+        console.log('Trying alternative Solana connection...');
+        
+        // Direct Phantom detection without timeout
+        const provider = getPhantomProvider();
+        if (!provider) {
+            throw new Error('Phantom wallet not detected');
+        }
+
+        console.log('Attempting direct connection...');
+        
+        // Try direct connection without options
+        await provider.connect();
+        
+        console.log('Direct connection successful, public key:', provider.publicKey?.toString());
+
+        // Try alternative Supabase auth approach
+        const { data, error } = await supabaseClient.auth.signInWithOAuth({
+            provider: 'solana',
+            options: {
+                skipBrowserRedirect: true,
+                queryParams: {
+                    provider: 'phantom'
+                }
+            }
+        });
+
+        if (error) throw error;
+
+        console.log('Alternative sign-in successful:', data);
+        setTimeout(() => checkUserSafely(), 1000);
+        
+    } catch (error) {
+        console.error('Alternative sign-in failed:', error);
+        showError('Authentication failed: ' + error.message);
+    } finally {
+        setLoading(false, document.getElementById('signInSolanaBtn'));
+    }
 }
 
 async function handleSignOut() {
@@ -241,7 +344,6 @@ function updateUIForAuthenticated(user) {
         userInfo.style.display = 'block';
         document.getElementById('userEmail').textContent = user.email || 'No email';
         
-        // Extract wallet address from user metadata or app_metadata
         const walletAddress = user.user_metadata?.wallet_address || 
                             user.app_metadata?.provider_id || 
                             user.user_metadata?.public_key ||
@@ -276,10 +378,7 @@ function showError(message) {
         errorDiv.style.borderRadius = '0.25rem';
         errorDiv.style.backgroundColor = '#fef2f2';
         
-        // Auto-hide error after 5 seconds
-        setTimeout(() => {
-            hideError();
-        }, 5000);
+        setTimeout(() => hideError(), 5000);
     }
 }
 
@@ -296,31 +395,22 @@ function setLoading(isLoading, button) {
         if (isLoading) {
             button.classList.add('loading');
             button.disabled = true;
-            if (button.id === 'signInSolanaBtn') {
-                button.textContent = 'Connecting to Phantom...';
-            } else {
-                button.textContent = 'Signing out...';
-            }
+            button.textContent = 'Connecting...';
         } else {
             button.classList.remove('loading');
             button.disabled = false;
-            if (button.id === 'signInSolanaBtn') {
-                button.textContent = 'Sign in with Solana';
-            } else {
-                button.textContent = 'Sign Out';
-            }
+            button.textContent = 'Sign in with Solana';
         }
     }
 }
 
-// Add some basic styles for loading state
+// Add styles for loading state
 const style = document.createElement('style');
 style.textContent = `
     button.loading {
         opacity: 0.7;
         cursor: not-allowed;
     }
-    
     button:disabled {
         opacity: 0.5;
         cursor: not-allowed;
@@ -328,30 +418,25 @@ style.textContent = `
 `;
 document.head.appendChild(style);
 
-// Initialize the app when everything is loaded
-window.addEventListener('load', initializeApp);
-
-// Also initialize if Supabase loads after window load
-if (document.readyState === 'complete') {
-    initializeApp();
+// Debug function to check what's available
+function debugWalletDetection() {
+    console.log('=== Wallet Detection Debug ===');
+    console.log('window.phantom:', window.phantom);
+    console.log('window.solana:', window.solana);
+    console.log('window.phantom?.solana:', window.phantom?.solana);
+    console.log('getPhantomProvider():', getPhantomProvider());
+    console.log('=============================');
 }
 
-// Listen for Phantom wallet connection changes
+// Initialize the app
 window.addEventListener('load', () => {
-    const provider = getPhantomProvider();
-    if (provider) {
-        provider.on('connect', () => {
-            console.log('Phantom wallet connected');
-        });
-        
-        provider.on('disconnect', () => {
-            console.log('Phantom wallet disconnected');
-            checkUserSafely();
-        });
-        
-        provider.on('accountChanged', (publicKey) => {
-            console.log('Phantom account changed:', publicKey?.toString());
-            checkUserSafely();
-        });
-    }
+    console.log('Window loaded, initializing app...');
+    debugWalletDetection(); // Debug info
+    initializeApp();
 });
+
+if (document.readyState === 'complete') {
+    console.log('Document already complete, initializing app...');
+    debugWalletDetection(); // Debug info
+    initializeApp();
+}
