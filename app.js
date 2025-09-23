@@ -170,17 +170,25 @@ async function signInWithSolana() {
 
 // Improved Phantom wallet detection with timeout
 function detectPhantomWallet(timeout = 5000) {
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
         console.log('Detecting Phantom wallet...');
         
-        // Immediate check
+        // Immediate check with detailed debugging
         const provider = getPhantomProvider();
         if (provider) {
             console.log('Phantom wallet found immediately');
+            console.log('Provider details:', {
+                isPhantom: provider.isPhantom,
+                isConnected: provider.isConnected,
+                publicKey: provider.publicKey?.toString(),
+                version: provider.version
+            });
             resolve(provider);
             return;
         }
 
+        console.log('Phantom not found immediately, waiting for wallet to load...');
+        
         // If not found immediately, wait for it to load
         let timeoutId;
         const checkInterval = setInterval(() => {
@@ -189,6 +197,12 @@ function detectPhantomWallet(timeout = 5000) {
                 clearInterval(checkInterval);
                 clearTimeout(timeoutId);
                 console.log('Phantom wallet found after waiting');
+                console.log('Provider details:', {
+                    isPhantom: foundProvider.isPhantom,
+                    isConnected: foundProvider.isConnected,
+                    publicKey: foundProvider.publicKey?.toString(),
+                    version: foundProvider.version
+                });
                 resolve(foundProvider);
             }
         }, 100);
@@ -196,9 +210,29 @@ function detectPhantomWallet(timeout = 5000) {
         // Timeout if wallet not detected
         timeoutId = setTimeout(() => {
             clearInterval(checkInterval);
-            console.log('Phantom wallet detection timeout');
-            resolve(null);
+            console.log('Phantom wallet detection timeout after', timeout, 'ms');
+            console.log('Current window state:', {
+                hasPhantom: !!window.phantom,
+                hasSolana: !!window.solana,
+                phantomSolana: window.phantom?.solana,
+                windowSolana: window.solana
+            });
+            reject(new Error(`Phantom wallet not detected within ${timeout}ms. Please ensure Phantom is installed and refresh the page.`));
         }, timeout);
+
+        // Also listen for Phantom injection events
+        window.addEventListener('phantom#initialized', function(event) {
+            clearInterval(checkInterval);
+            clearTimeout(timeoutId);
+            console.log('Phantom injected via event:', event);
+            const provider = getPhantomProvider();
+            if (provider) {
+                resolve(provider);
+            } else {
+                reject(new Error('Phantom event received but provider not found'));
+            }
+        }, { once: true });
+
     });
 }
 
