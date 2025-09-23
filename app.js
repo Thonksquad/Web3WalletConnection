@@ -11,8 +11,6 @@ const SUPABASE_CONFIG = {
 // Initialize the application
 function initializeApp() {
     console.log('Initializing app...');
-    console.log('Supabase URL:', SUPABASE_CONFIG.URL);
-    console.log('Supabase Key:', SUPABASE_CONFIG.ANON_KEY ? 'Set' : 'Not set');
 
     // Check if supabase is available
     if (typeof supabase === 'undefined') {
@@ -22,58 +20,24 @@ function initializeApp() {
     }
 
     try {
-        // Create Supabase client with proper configuration
+        // Create Supabase client with simpler configuration
         const { createClient } = supabase;
         supabaseClient = createClient(SUPABASE_CONFIG.URL, SUPABASE_CONFIG.ANON_KEY, {
             auth: {
-                autoRefreshToken: true,
-                persistSession: true,
-                detectSessionInUrl: true,
-                flowType: 'pkce'
+                autoRefreshToken: false,
+                persistSession: false,
+                detectSessionInUrl: false
             }
         });
 
         console.log('Supabase client created successfully');
         
-        // Wait for Ethereum provider to be available
-        waitForEthereumProvider();
+        // Set up the app immediately without waiting for Ethereum
+        setupApp();
+        
     } catch (error) {
         console.error('Failed to create Supabase client:', error);
         showError('Failed to initialize authentication. Please refresh the page.');
-    }
-}
-
-function waitForEthereumProvider() {
-    console.log('Checking for Ethereum provider...');
-    
-    if (typeof window.ethereum !== 'undefined') {
-        console.log('Ethereum provider found immediately');
-        setupApp();
-    } else {
-        console.log('Waiting for Ethereum provider...');
-        
-        let checks = 0;
-        const maxChecks = 30; // 3 seconds timeout
-        
-        const checkInterval = setInterval(() => {
-            checks++;
-            
-            if (typeof window.ethereum !== 'undefined') {
-                console.log('Ethereum provider found after', checks * 100, 'ms');
-                clearInterval(checkInterval);
-                setupApp();
-            }
-            
-            if (checks >= maxChecks) {
-                clearInterval(checkInterval);
-                console.error('Ethereum wallet not detected after timeout');
-                showError('Please install MetaMask or another Ethereum wallet to continue.');
-                const signInBtn = document.getElementById('signInBtn');
-                if (signInBtn) {
-                    signInBtn.style.display = 'none';
-                }
-            }
-        }, 100);
     }
 }
 
@@ -81,7 +45,6 @@ function setupApp() {
     if (isInitialized) return;
     
     console.log('Setting up application...');
-    console.log('Ethereum provider:', window.ethereum ? 'Available' : 'Not available');
     
     // Set up event listeners when DOM is ready
     if (document.readyState === 'loading') {
@@ -110,18 +73,8 @@ function setupEventListeners() {
         console.log('Sign out button listener added');
     }
     
-    // Check user status after a brief delay to ensure Supabase is ready
-    setTimeout(() => {
-        checkUser();
-    }, 500);
-    
-    // Listen for auth state changes
-    if (supabaseClient) {
-        supabaseClient.auth.onAuthStateChange((event, session) => {
-            console.log('Auth state changed:', event, session ? 'Session available' : 'No session');
-            checkUser();
-        });
-    }
+    // Check user status with a safer approach
+    checkUserSafely();
 }
 
 async function signInWithWeb3() {
@@ -140,20 +93,33 @@ async function signInWithWeb3() {
         console.log('Initiating Web3 sign-in...');
         
         // Request account access first
-        await window.ethereum.request({ method: 'eth_requestAccounts' });
+        const accounts = await window.ethereum.request({ 
+            method: 'eth_requestAccounts' 
+        });
         
-        // Sign in with Web3
-        const { data, error } = await supabaseClient.auth.signInWithWeb3({
-            provider: window.ethereum,
-            chain: 'ethereum',
-            statement: 'Sign in to access the application'
+        console.log('Connected account:', accounts[0]);
+        
+        // Use a different approach for Web3 sign-in
+        const { data, error } = await supabaseClient.auth.signInWithOAuth({
+            provider: 'ethereum',
+            options: {
+                queryParams: {
+                    chain: 'ethereum',
+                    statement: 'Sign in to access the application'
+                }
+            }
         });
 
         if (error) {
             throw error;
         }
 
-        console.log('Web3 sign-in successful:', data);
+        console.log('Web3 sign-in initiated:', data);
+        
+        // Check user after successful sign-in
+        setTimeout(() => {
+            checkUserSafely();
+        }, 2000);
         
     } catch (error) {
         console.error('Sign-in error:', error);
@@ -163,13 +129,55 @@ async function signInWithWeb3() {
             showError('Sign-in cancelled by user');
         } else if (error.message?.includes('User rejected')) {
             showError('Sign-in rejected by wallet');
-        } else if (error.message?.includes('AuthSessionMissingError')) {
-            showError('Authentication session error. Please try again.');
         } else {
             showError(error.message || 'Sign-in failed. Please try again.');
         }
     } finally {
         setLoading(false, document.getElementById('signInBtn'));
+    }
+}
+
+// Alternative Web3 sign-in method
+async function signInWithWeb3Alternative() {
+    try {
+        if (!window.ethereum) {
+            throw new Error('Ethereum wallet not available');
+        }
+
+        // Get the current account
+        const accounts = await window.ethereum.request({ 
+            method: 'eth_requestAccounts' 
+        });
+        const account = accounts[0];
+        
+        console.log('Signing in with account:', account);
+        
+        // Create a simple message to sign
+        const message = `Sign in to the application at ${new Date().toISOString()}`;
+        
+        // Sign the message
+        const signature = await window.ethereum.request({
+            method: 'personal_sign',
+            params: [message, account],
+        });
+        
+        console.log('Signature received:', signature);
+        
+        // Use the signIn method that doesn't rely on session storage
+        const { data, error } = await supabaseClient.auth.signIn({
+            address: account,
+            signature: signature,
+            message: message
+        });
+
+        if (error) throw error;
+        
+        console.log('Sign-in successful:', data);
+        return data;
+        
+    } catch (error) {
+        console.error('Alternative sign-in error:', error);
+        throw error;
     }
 }
 
@@ -195,58 +203,82 @@ async function handleSignOut() {
         showError('Sign-out failed: ' + error.message);
     } finally {
         setLoading(false, document.getElementById('signOutBtn'));
-        checkUser();
+        checkUserSafely();
     }
 }
 
-async function checkUser() {
+// Safer user check that handles session errors gracefully
+async function checkUserSafely() {
     try {
         if (!supabaseClient) {
             console.log('Supabase client not available for user check');
+            updateUIForUnauthenticated();
             return;
         }
         
-        console.log('Checking user authentication status...');
+        console.log('Checking user authentication status safely...');
         
-        const { data: { user }, error } = await supabaseClient.auth.getUser();
+        // Use a try-catch approach that doesn't throw on missing sessions
+        const { data: { session }, error: sessionError } = await supabaseClient.auth.getSession();
         
-        if (error) {
-            console.error('Error getting user:', error);
-            // Don't show error to user for session missing errors during initial check
-            if (!error.message.includes('AuthSessionMissingError')) {
-                showError('Failed to check user status');
-            }
+        if (sessionError) {
+            console.log('Session check error (non-critical):', sessionError.message);
+            // This is expected for unauthenticated users
+            updateUIForUnauthenticated();
             return;
         }
         
-        const userInfo = document.getElementById('userInfo');
-        const signInBtn = document.getElementById('signInBtn');
-        const signOutBtn = document.getElementById('signOutBtn');
-        
-        if (user) {
-            // User is logged in
-            console.log('User is authenticated:', user);
-            userInfo.style.display = 'block';
-            document.getElementById('userEmail').textContent = user.email || 'No email';
-            document.getElementById('userAddress').textContent = user.user_metadata?.wallet_address || 'No wallet address';
-            document.getElementById('userId').textContent = user.id;
+        if (session) {
+            // We have a session, now get the user safely
+            const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
             
-            if (signInBtn) signInBtn.style.display = 'none';
-            if (signOutBtn) signOutBtn.style.display = 'block';
-        } else {
-            // User is not logged in
-            console.log('User is not authenticated');
-            userInfo.style.display = 'none';
-            if (signInBtn) signInBtn.style.display = 'block';
-            if (signOutBtn) signOutBtn.style.display = 'none';
+            if (userError) {
+                console.log('User check error:', userError.message);
+                updateUIForUnauthenticated();
+                return;
+            }
+            
+            if (user) {
+                updateUIForAuthenticated(user);
+                return;
+            }
         }
+        
+        // No session or user found
+        updateUIForUnauthenticated();
+        
     } catch (error) {
-        console.error('Error in checkUser:', error);
-        // Don't show session missing errors to users during initial load
-        if (!error.message.includes('AuthSessionMissingError')) {
-            showError('Failed to check authentication status');
-        }
+        console.log('Non-critical error in safe user check:', error.message);
+        updateUIForUnauthenticated();
     }
+}
+
+function updateUIForAuthenticated(user) {
+    console.log('User is authenticated:', user);
+    const userInfo = document.getElementById('userInfo');
+    const signInBtn = document.getElementById('signInBtn');
+    const signOutBtn = document.getElementById('signOutBtn');
+    
+    if (userInfo) {
+        userInfo.style.display = 'block';
+        document.getElementById('userEmail').textContent = user.email || 'No email';
+        document.getElementById('userAddress').textContent = user.user_metadata?.wallet_address || 'No wallet address';
+        document.getElementById('userId').textContent = user.id;
+    }
+    
+    if (signInBtn) signInBtn.style.display = 'none';
+    if (signOutBtn) signOutBtn.style.display = 'block';
+}
+
+function updateUIForUnauthenticated() {
+    console.log('User is not authenticated');
+    const userInfo = document.getElementById('userInfo');
+    const signInBtn = document.getElementById('signInBtn');
+    const signOutBtn = document.getElementById('signOutBtn');
+    
+    if (userInfo) userInfo.style.display = 'none';
+    if (signInBtn) signInBtn.style.display = 'block';
+    if (signOutBtn) signOutBtn.style.display = 'none';
 }
 
 function showError(message) {
