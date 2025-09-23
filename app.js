@@ -148,29 +148,21 @@ async function signInWithSolana() {
             throw new Error('Supabase client not initialized');
         }
         
-        // Check if Solana wallet is available (Phantom, etc.)
-        if (typeof window.solana === 'undefined') {
-            throw new Error('Solana wallet not available. Please install Phantom wallet or another Solana wallet.');
+        // Check if Phantom wallet is available
+        if (typeof window.phantom === 'undefined') {
+            throw new Error('Phantom wallet not available. Please install Phantom wallet.');
         }
         
         hideError();
         setLoading(true, document.getElementById('signInSolanaBtn'));
 
-        console.log('Initiating Solana Web3 sign-in...');
+        console.log('Initiating Solana Web3 sign-in with Phantom...');
         
-        // Connect to Solana wallet
-        const response = await window.solana.connect();
-        const publicKey = response.publicKey.toString();
-        
-        console.log('Connected Solana account:', publicKey);
-        
-        // Use Supabase's Web3 sign-in for Solana
+        // Use the correct Supabase syntax for Phantom wallet
         const { data, error } = await supabaseClient.auth.signInWithWeb3({
-            provider: 'solana',
-            options: {
-                chain: 'solana',
-                statement: 'Sign in to access the application'
-            }
+            chain: 'solana',
+            statement: 'Sign in to access the application',
+            wallet: window.phantom
         });
 
         if (error) {
@@ -202,7 +194,6 @@ async function signInWithSolana() {
     }
 }
 
-// Alternative Solana sign-in method for more control
 async function signInWithSolanaAlternative() {
     try {
         if (!window.solana) {
