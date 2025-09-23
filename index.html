@@ -28,9 +28,10 @@
     
     <!-- Inline config using template variables -->
     <script>
-        // Set the Supabase configuration directly on window object
-        window.SUPABASE_URL = 'https://spi.t.rodasapc.space/';
-        window.SUPABASE_ANON_KEY = 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJzdXBhYmFzZSIsImlhdCI6MTc1ODI3NjU0MCwiZXhwIjo0OTEzOTUwMTQwLCJyb2xlIjoiYW5vbiJ9.sHNHvwS4haQTnJ-MJ2n1NMnQLUg87pCd2DuxeWAkdCk';
+        window.SUPABASE_CONFIG = {
+            URL: '{{ .SUPABASE_URL }}',
+            ANON_KEY: '{{ .SUPABASE_ANON_KEY }}'
+        };
     </script>
     
     <!-- Load your main app logic -->
