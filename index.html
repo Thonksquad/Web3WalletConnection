@@ -26,14 +26,6 @@
     <!-- Load Supabase from CDN first -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     
-    <!-- Inline config using template variables -->
-    <script>
-        window.SUPABASE_CONFIG = {
-            URL: '{{ .SUPABASE_URL }}',
-            ANON_KEY: '{{ .SUPABASE_ANON_KEY }}'
-        };
-    </script>
-    
     <!-- Load your main app logic -->
     <script src="app.js"></script>
 </body>
