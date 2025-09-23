@@ -81,80 +81,61 @@ async function signInWithSolana() {
         if (!supabaseClient) {
             throw new Error('Supabase client not initialized');
         }
-        
+
         hideError();
         setLoading(true, document.getElementById('signInSolanaBtn'));
 
         console.log('Initiating Solana connection...');
-        
-        // Check for Phantom wallet with timeout
+
+        // Detect Phantom wallet
         const provider = await detectPhantomWallet(5000);
-        
         if (!provider) {
-            throw new Error('Phantom wallet not detected. Please install Phantom wallet and try again.');
+            throw new Error('Phantom wallet not detected. Please install Phantom wallet.');
         }
 
-        console.log('Phantom wallet detected, connecting...');
-        console.log('Provider state:', {
+        console.log('Phantom wallet detected:', {
+            isPhantom: provider.isPhantom,
             isConnected: provider.isConnected,
-            publicKey: provider.publicKey?.toString()
+            publicKey: provider.publicKey?.toString(),
+            version: provider.version
         });
 
-        // Add connection timeout
-        const connectionTimeout = 15000; // 15 seconds
-        let connectionResponse;
-        
-        // Method 1: Try the recommended connect() approach with timeout
-        try {
-            connectionResponse = await Promise.race([
-                provider.connect(),
-                new Promise((_, reject) => 
-                    setTimeout(() => reject(new Error('Connection timeout')), connectionTimeout)
-                )
-            ]);
-            console.log('Phantom connection successful:', connectionResponse);
-        } catch (connectError) {
-            console.log('First connection attempt failed:', connectError);
-            
-            // If already connected, use current state
-            if (provider.isConnected && provider.publicKey) {
-                console.log('Wallet already connected, using existing connection');
-                connectionResponse = { publicKey: provider.publicKey };
-            } else {
-                // Method 2: Try the request() method as fallback
-                try {
-                    connectionResponse = await Promise.race([
-                        provider.request({ method: "connect" }),
-                        new Promise((_, reject) => 
-                            setTimeout(() => reject(new Error('Connection timeout')), connectionTimeout)
-                        )
-                    ]);
-                    console.log('Alternative connection successful:', connectionResponse);
-                } catch (requestError) {
-                    console.log('Alternative connection also failed:', requestError);
-                    
-                    // Check if we have a public key despite the error
-                    if (provider.publicKey) {
-                        console.log('Found public key despite error, continuing...');
-                        connectionResponse = { publicKey: provider.publicKey };
-                    } else {
-                        throw new Error(`Connection failed: ${requestError.message || 'User rejected the request'}`);
-                    }
+        // Check if already connected
+        if (provider.isConnected && provider.publicKey) {
+            console.log('Wallet already connected, using existing public key:', provider.publicKey.toString());
+        } else {
+            console.log('Attempting to connect to Phantom wallet...');
+            try {
+                // Attempt to connect with a timeout
+                const connectionResponse = await Promise.race([
+                    provider.connect(),
+                    new Promise((_, reject) =>
+                        setTimeout(() => reject(new Error('Connection timeout')), 15000)
+                    )
+                ]);
+
+                console.log('Connection successful:', connectionResponse);
+            } catch (connectError) {
+                console.error('Connection error:', connectError);
+
+                // Fallback: Check if public key is available despite error
+                if (provider.publicKey) {
+                    console.log('Public key available despite connection error:', provider.publicKey.toString());
+                } else {
+                    throw new Error(`Failed to connect: ${connectError.message || 'Unknown error'}`);
                 }
             }
         }
 
-        // Verify we have a public key
-        if (!connectionResponse?.publicKey && !provider.publicKey) {
-            throw new Error('Connected but no public key received');
+        // Ensure public key is available
+        if (!provider.publicKey) {
+            throw new Error('No public key available after connection');
         }
 
-        const publicKey = connectionResponse?.publicKey || provider.publicKey;
-        console.log('Phantom wallet connected successfully');
-        console.log('Public key:', publicKey.toString());
-        console.log('Is connected:', provider.isConnected);
+        const publicKey = provider.publicKey.toString();
+        console.log('Public key retrieved:', publicKey);
 
-        // Use Supabase's signInWithWeb3 method for Solana
+        // Proceed with Supabase authentication
         console.log('Starting Supabase web3 authentication...');
         const { data, error } = await supabaseClient.auth.signInWithWeb3({
             chain: 'solana',
@@ -169,30 +150,23 @@ async function signInWithSolana() {
         }
 
         console.log('Solana sign-in successful:', data);
-        
-        // Check user after successful sign-in
-        setTimeout(() => {
-            checkUserSafely();
-        }, 1000);
-        
+
+        // Check user status after sign-in
+        setTimeout(() => checkUserSafely(), 1000);
+
     } catch (error) {
         console.error('Solana sign-in error:', error);
-        
-        // Enhanced error handling
-        if (error.code === 4001 || 
-            error.message?.includes('rejected') || 
-            error.message?.includes('canceled') ||
-            error.message?.includes('User rejected')) {
-            showError('Solana sign-in was cancelled or rejected by user');
+        let errorMessage = 'Solana sign-in failed. Please try again.';
+        if (error.message?.includes('rejected') || error.code === 4001) {
+            errorMessage = 'Connection rejected by user.';
         } else if (error.message?.includes('timeout')) {
-            showError('Wallet connection timeout. Please try again.');
-        } else if (error.message?.includes('not found') || error.message?.includes('unavailable')) {
-            showError('Phantom wallet not found. Please install Phantom wallet.');
+            errorMessage = 'Wallet connection timeout. Please try again.';
+        } else if (error.message?.includes('not detected')) {
+            errorMessage = 'Phantom wallet not found. Please install Phantom wallet.';
         } else if (error.message?.includes('public key')) {
-            showError('Connected to wallet but could not retrieve public key.');
-        } else {
-            showError(error.message || 'Solana sign-in failed. Please try again.');
+            errorMessage = 'Unable to retrieve wallet public key.';
         }
+        showError(errorMessage);
     } finally {
         setLoading(false, document.getElementById('signInSolanaBtn'));
     }
